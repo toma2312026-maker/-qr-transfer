@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QRコード送受信チェック</title>
+<style>
+body{font-family:sans-serif;text-align:center;margin:18px}
+button,input{font-size:16px;padding:10px;margin:6px;max-width:95%}
+#settingsIcon{position:fixed;top:10px;right:12px;font-size:26px;cursor:pointer}
+#settingsModal{display:none;position:fixed;z-index:10;top:10%;left:7%;right:7%;background:#fff;border:2px solid #222;padding:15px}
+#video{width:100%;max-width:400px;border:3px solid #222}
+#receiverCode{font-size:42px;font-weight:bold}
+.card{border:1px solid #bbb;border-radius:12px;padding:14px;margin:12px auto;max-width:430px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<span id="settingsIcon">⚙️</span>
+<h2>QRコード送受信チェック</h2>
+
+<div id="modeSelect" class="card">
+<h3>モードを選択</h3>
+<button id="senderBtn">📤 送信</button>
+<button id="receiverBtn">📥 受信</button>
+</div>
+
+<div id="senderScreen" class="hidden">
+<div class="card" id="connectCard">
+<h3>受信側に接続</h3>
+<input id="connectCode" inputmode="numeric" maxlength="5" placeholder="12345">
+<button id="connectBtn">接続</button>
+</div>
+<div class="card hidden" id="senderReady">
+<h3>📤 送信モード</h3>
+<p id="senderDestination"></p>
+<div id="status">接続を確認中…</div>
+<button id="startScanBtn">▶ スキャン開始</button>
+<p id="senderResult"></p>
+<video id="video"></video>
+</div>
+</div>
+
+<div id="receiverScreen" class="hidden">
+<div class="card">
+<h3>📥 受信モード</h3>
+<div id="receiverCode">-----</div>
+<div id="statusReceiver">受信待機中</div>
+<p id="receiverResult"></p>
+</div>
+</div>
+
+<audio id="correctSound"></audio>
+<audio id="wrongSound"></audio>
+
+<div id="settingsModal">
+<h3>設定</h3>
+<div id="codeList"></div>
+<button onclick="addCodeInput()">＋追加</button><hr>
+<label>正解音</label><input type="file" id="correctSoundFile" accept="audio/*"><br><br>
+<label>不正解音</label><input type="file" id="wrongSoundFile" accept="audio/*"><br><br>
+<button onclick="saveSettings()">保存</button>
+<button onclick="closeSettings()">閉じる</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyABSz7WUs2QomfCiuiPBF4F2i64ZtFVsnE",
+  authDomain: "qrtransfer-b5da2.firebaseapp.com",
+  databaseURL: "https://qrtransfer-b5da2-default-rtdb.firebaseio.com",
+  projectId: "qrtransfer-b5da2",
+  storageBucket: "qrtransfer-b5da2.firebasestorage.app",
+  messagingSenderId: "382295952066",
+  appId: "1:382295952066:web:bfc8b93afe49773a36c95b"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let mode="", receiverCode="", correctCodes=[], lastScanned="", receiverUnsub=null, stream=null;
+const video=document.getElementById("video"), canvas=document.createElement("canvas"), ctx=canvas.getContext("2d");
+const correctSound=document.getElementById("correctSound"), wrongSound=document.getElementById("wrongSound");
+
+function fiveDigits(){ return String(Math.floor(10000+Math.random()*90000)); }
+function path(code){ return "qrReceivers/"+code; }
+function stopCamera(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+
+document.getElementById("senderBtn").onclick=async()=>{
+  mode="sender";
+  document.getElementById("modeSelect").classList.add("hidden");
+  document.getElementById("senderScreen").classList.remove("hidden");
+  const saved=localStorage.getItem("qrReceiverCode");
+  if(saved) { document.getElementById("connectCode").value=saved; await connectSender(saved,true); }
+};
+
+document.getElementById("receiverBtn").onclick=async()=>{
+  mode="receiver";
+  document.getElementById("modeSelect").classList.add("hidden");
+  document.getElementById("receiverScreen").classList.remove("hidden");
+  receiverCode=fiveDigits();
+  document.getElementById("receiverCode").textContent=receiverCode;
+  const onlineRef=ref(db,path(receiverCode)+"/online");
+  await set(ref(db,path(receiverCode)), {online:true,createdAt:Date.now(),lastMessage:null});
+  onDisconnect(onlineRef).set(false);
+  onValue(ref(db,path(receiverCode)+"/lastMessage"), snap=>{
+    const data=snap.val();
+    if(!data || !data.value) return;
+    document.getElementById("receiverResult").textContent="受信: "+data.value;
+    if(correctCodes.includes(data.value)){
+      document.getElementById("statusReceiver").textContent="⭕ 正解！";
+      correctSound.currentTime=0; correctSound.play().catch(()=>{});
+    }else{
+      document.getElementById("statusReceiver").textContent="❌ 不正解";
+      wrongSound.currentTime=0; wrongSound.play().catch(()=>{});
+    }
+  });
+};
+
+document.getElementById("connectBtn").onclick=()=>connectSender(document.getElementById("connectCode").value.trim(),false);
+
+async function connectSender(code,automatic){
+  if(!/^\d{5}$/.test(code)){ alert("5桁の数字を入力してください"); return; }
+  document.getElementById("status").textContent="接続確認中…";
+  try{
+    const snap=await get(ref(db,path(code)));
+    if(!snap.exists() || snap.val().online!==true){
+      localStorage.removeItem("qrReceiverCode");
+      document.getElementById("connectCard").classList.remove("hidden");
+      document.getElementById("senderReady").classList.add("hidden");
+      document.getElementById("status").textContent="受信側が見つかりません。";
+      if(!automatic) alert("受信側が見つかりません");
+      return;
+    }
+    receiverCode=code;
+    localStorage.setItem("qrReceiverCode",code);
+    document.getElementById("connectCard").classList.add("hidden");
+    document.getElementById("senderReady").classList.remove("hidden");
+    document.getElementById("senderDestination").textContent="接続先: "+code;
+    document.getElementById("status").textContent="🟢 接続OK";
+    if(receiverUnsub) receiverUnsub();
+    receiverUnsub=onValue(ref(db,path(code)+"/online"), s=>{
+      if(s.val()!==true){
+        stopCamera();
+        localStorage.removeItem("qrReceiverCode");
+        document.getElementById("connectCard").classList.remove("hidden");
+        document.getElementById("senderReady").classList.add("hidden");
+        document.getElementById("status").textContent="🔴 通信が切れました。";
+      }
+    });
+  }catch(e){ document.getElementById("status").textContent="エラー: "+e.message; }
+}
+
+document.getElementById("startScanBtn").onclick=async()=>{
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    video.srcObject=stream; video.setAttribute("playsinline",true); await video.play(); scan();
+  }catch(e){ alert("カメラ起動エラー: "+e.message); }
+};
+
+async function scan(){
+  if(!stream) return;
+  if(video.readyState===video.HAVE_ENOUGH_DATA){
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    ctx.drawImage(video,0,0);
+    const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+    if(window.jsQR){
+      const code=window.jsQR(imageData.data,imageData.width,imageData.height);
+      if(code && code.data!==lastScanned){
+        lastScanned=code.data;
+        document.getElementById("senderResult").textContent="送信: "+code.data;
+        try{ await set(ref(db,path(receiverCode)+"/lastMessage"), {value:code.data,time:Date.now()}); }catch(e){ document.getElementById("status").textContent="送信失敗"; }
+        setTimeout(()=>lastScanned="",2000);
+      }
+    }
+  }
+  requestAnimationFrame(scan);
+}
+
+window.addCodeInput=(value="")=>{
+  const div=document.createElement("div");
+  div.innerHTML=`<input type="text" value="${value.replace(/"/g,"&quot;")}" placeholder="コード入力"><button onclick="this.parentElement.remove()">削除</button>`;
+  document.getElementById("codeList").appendChild(div);
+};
+
+window.saveSettings=()=>{
+  correctCodes=[...document.querySelectorAll("#codeList input")].map(x=>x.value.trim()).filter(Boolean);
+  localStorage.setItem("qrCorrectCodes", JSON.stringify(correctCodes));
+  const c=document.getElementById("correctSoundFile").files[0], w=document.getElementById("wrongSoundFile").files[0];
+  if(c) correctSound.src=URL.createObjectURL(c);
+  if(w) wrongSound.src=URL.createObjectURL(w);
+  alert("保存しました"); window.closeSettings();
+};
+
+window.closeSettings=()=>{ document.getElementById("settingsModal").style.display="none"; };
+document.getElementById("settingsIcon").onclick=()=>{
+  document.getElementById("settingsModal").style.display="block";
+  if(!document.getElementById("codeList").children.length) window.addCodeInput();
+};
+
+try{ correctCodes=JSON.parse(localStorage.getItem("qrCorrectCodes")||"[]"); }catch{}
+if(correctCodes.length) correctCodes.forEach(window.addCodeInput);
+</script>
+<script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+</body>
+</html>
