@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QRコード送受信チェック</title>
+
+<title>QRコード送受信システム</title>
 
 <style>
 body{
@@ -68,7 +69,7 @@ button,input{
 
 <span id="settingsIcon">⚙️</span>
 
-<h2>QRコード送受信チェック</h2>
+<h2>QRコード送受信システム</h2>
 
 <div id="modeSelect" class="card">
   <h3>モードを選択</h3>
@@ -125,10 +126,8 @@ button,input{
 
 </div>
 
-  
 <audio id="correctSound"></audio>
 <audio id="wrongSound"></audio>
-
 
 <div id="settingsModal">
 
@@ -166,7 +165,6 @@ button,input{
 
 </div>
 
-
 <script type="module">
 
 import { initializeApp }
@@ -181,7 +179,6 @@ import {
   onDisconnect
 }
 from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
-
 
 const firebaseConfig = {
 
@@ -205,24 +202,16 @@ const firebaseConfig = {
 
 };
 
-
 const app = initializeApp(firebaseConfig);
 
 const db = getDatabase(app);
 
-
 let mode = "";
-
 let receiverCode = "";
-
 let correctCodes = [];
-
 let lastScanned = "";
-
 let receiverUnsub = null;
-
 let stream = null;
-
 
 const video =
 document.getElementById("video");
@@ -233,13 +222,11 @@ document.createElement("canvas");
 const ctx =
 canvas.getContext("2d");
 
-
 const correctSound =
 document.getElementById("correctSound");
 
 const wrongSound =
 document.getElementById("wrongSound");
-
 
 function fiveDigits(){
 
@@ -251,13 +238,11 @@ function fiveDigits(){
 
 }
 
-
 function path(code){
 
   return "qrReceivers/" + code;
 
 }
-
 
 function stopCamera(){
 
@@ -271,7 +256,6 @@ function stopCamera(){
   }
 
 }
-
 
 document.getElementById("senderBtn").onclick =
 async()=>{
@@ -288,10 +272,8 @@ async()=>{
     .classList
     .remove("hidden");
 
-
   const saved =
   localStorage.getItem("qrReceiverCode");
-
 
   if(saved){
 
@@ -305,41 +287,34 @@ async()=>{
 
 };
 
-
 document.getElementById("receiverBtn").onclick =
 async()=>{
 
   mode = "receiver";
-
 
   document
     .getElementById("modeSelect")
     .classList
     .add("hidden");
 
-
   document
     .getElementById("receiverScreen")
     .classList
     .remove("hidden");
 
-
   receiverCode =
   fiveDigits();
-
 
   document
     .getElementById("receiverCode")
     .textContent =
     receiverCode;
 
-
   const onlineRef =
   ref(
     db,
     path(receiverCode)+"/online"
   );
-
 
   await set(
 
@@ -353,10 +328,8 @@ async()=>{
 
   );
 
-
   onDisconnect(onlineRef)
     .set(false);
-
 
   onValue(
 
@@ -370,16 +343,13 @@ async()=>{
       const data =
       snap.val();
 
-
       if(!data || !data.value)
         return;
-
 
       document
         .getElementById("receiverResult")
         .textContent =
         "受信: " + data.value;
-
 
       if(
         correctCodes.includes(
@@ -392,22 +362,18 @@ async()=>{
           .textContent =
           "⭕ 正解！";
 
-
         correctSound.currentTime = 0;
 
         correctSound
           .play()
           .catch(()=>{});
 
-
       }else{
-
 
         document
           .getElementById("statusReceiver")
           .textContent =
           "❌ 不正解";
-
 
         wrongSound.currentTime = 0;
 
@@ -422,7 +388,6 @@ async()=>{
   );
 
 };
-
 
 document
 .getElementById("connectBtn")
@@ -442,7 +407,6 @@ document
 
 };
 
-
 async function connectSender(
   code,
   automatic
@@ -458,21 +422,17 @@ async function connectSender(
 
   }
 
-
   document
     .getElementById("status")
     .textContent =
     "接続確認中…";
 
-
   try{
-
 
     const snap =
     await get(
       ref(db,path(code))
     );
-
 
     if(
       !snap.exists() ||
@@ -484,24 +444,20 @@ async function connectSender(
           "qrReceiverCode"
         );
 
-
       document
         .getElementById("connectCard")
         .classList
         .remove("hidden");
-
 
       document
         .getElementById("senderReady")
         .classList
         .add("hidden");
 
-
       document
         .getElementById("status")
         .textContent =
         "受信側が見つかりません。";
-
 
       if(!automatic){
 
@@ -511,48 +467,39 @@ async function connectSender(
 
       }
 
-
       return;
 
     }
 
-
     receiverCode = code;
-
 
     localStorage.setItem(
       "qrReceiverCode",
       code
     );
 
-
     document
       .getElementById("connectCard")
       .classList
       .add("hidden");
-
 
     document
       .getElementById("senderReady")
       .classList
       .remove("hidden");
 
-
     document
       .getElementById("senderDestination")
       .textContent =
       "接続先: " + code;
-
 
     document
       .getElementById("status")
       .textContent =
       "🟢 接続OK";
 
-
     if(receiverUnsub)
       receiverUnsub();
-
 
     receiverUnsub =
     onValue(
@@ -570,24 +517,20 @@ async function connectSender(
 
           stopCamera();
 
-
           localStorage
             .removeItem(
               "qrReceiverCode"
             );
-
 
           document
             .getElementById("connectCard")
             .classList
             .remove("hidden");
 
-
           document
             .getElementById("senderReady")
             .classList
             .add("hidden");
-
 
           document
             .getElementById("status")
@@ -600,7 +543,6 @@ async function connectSender(
 
     );
 
-
   }catch(e){
 
     document
@@ -611,7 +553,6 @@ async function connectSender(
   }
 
 }
-
 
 document
 .getElementById("startScanBtn")
@@ -631,22 +572,17 @@ async()=>{
 
       });
 
-
     video.srcObject =
     stream;
-
 
     video.setAttribute(
       "playsinline",
       true
     );
 
-
     await video.play();
 
-
     scan();
-
 
   }catch(e){
 
@@ -659,33 +595,27 @@ async()=>{
 
 };
 
-
 async function scan(){
 
   if(!stream)
     return;
-
 
   if(
     video.readyState ===
     video.HAVE_ENOUGH_DATA
   ){
 
-
     canvas.width =
     video.videoWidth;
 
-
     canvas.height =
     video.videoHeight;
-
 
     ctx.drawImage(
       video,
       0,
       0
     );
-
 
     const imageData =
     ctx.getImageData(
@@ -698,9 +628,7 @@ async function scan(){
 
     );
 
-
     if(window.jsQR){
-
 
       const code =
       window.jsQR(
@@ -713,17 +641,14 @@ async function scan(){
 
       );
 
-
       if(
         code &&
         code.data !==
         lastScanned
       ){
 
-
         lastScanned =
         code.data;
-
 
         document
           .getElementById("senderResult")
@@ -731,9 +656,7 @@ async function scan(){
           "送信: "
           + code.data;
 
-
         try{
-
 
           await set(
 
@@ -752,7 +675,6 @@ async function scan(){
 
           );
 
-
         }catch(e){
 
           document
@@ -761,7 +683,6 @@ async function scan(){
             "送信失敗";
 
         }
-
 
         setTimeout(
           ()=>lastScanned="",
@@ -774,21 +695,17 @@ async function scan(){
 
   }
 
-
   requestAnimationFrame(
     scan
   );
 
 }
 
-
 window.addCodeInput =
 (value="")=>{
 
-
   const div =
   document.createElement("div");
-
 
   div.innerHTML =
 
@@ -804,17 +721,14 @@ window.addCodeInput =
 
   </button>`;
 
-
   document
     .getElementById("codeList")
     .appendChild(div);
 
 };
 
-
 window.saveSettings =
 ()=>{
-
 
   correctCodes =
 
@@ -833,7 +747,6 @@ window.saveSettings =
 
   .filter(Boolean);
 
-
   localStorage.setItem(
 
     "qrCorrectCodes",
@@ -844,7 +757,6 @@ window.saveSettings =
 
   );
 
-
   const c =
 
   document
@@ -852,7 +764,6 @@ window.saveSettings =
       "correctSoundFile"
     )
     .files[0];
-
 
   const w =
 
@@ -862,14 +773,12 @@ window.saveSettings =
     )
     .files[0];
 
-
   if(c){
 
     correctSound.src =
     URL.createObjectURL(c);
 
   }
-
 
   if(w){
 
@@ -878,14 +787,11 @@ window.saveSettings =
 
   }
 
-
   alert("保存しました");
-
 
   window.closeSettings();
 
 };
-
 
 window.closeSettings =
 ()=>{
@@ -897,18 +803,15 @@ window.closeSettings =
 
 };
 
-
 document
 .getElementById("settingsIcon")
 .onclick =
 ()=>{
 
-
   document
     .getElementById("settingsModal")
     .style.display =
     "block";
-
 
   if(
 
@@ -923,7 +826,6 @@ document
   }
 
 };
-
 
 try{
 
@@ -940,7 +842,6 @@ try{
 
 }catch{}
 
-
 if(correctCodes.length){
 
   correctCodes.forEach(
@@ -950,7 +851,6 @@ if(correctCodes.length){
 }
 
 </script>
-
 
 <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
