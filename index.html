@@ -24,7 +24,7 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 .status.ok{color:#087443;background:#e8f7ef}
 .status.error{color:#b42318;background:#fff0ee}
 
-/* カメラ映像を読み取り枠の中だけに表示 */
+/* QR読み取り中は、読み取り枠の中だけカメラ映像を表示 */
 #cameraBox,.scanViewport{
   position:relative;
   width:min(78vw,300px);
@@ -41,12 +41,7 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
   height:100%;
   object-fit:cover;
 }
-#overlay{
-  position:absolute;
-  inset:0;
-  border:0;
-  pointer-events:none;
-}
+#overlay{position:absolute;inset:0;border:0;pointer-events:none}
 .cameraActions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
 .secondary{background:#e8edf5;color:#243247}
 .tinyButton{font-size:13px;padding:7px 11px;background:#e8edf5;color:#243247}
@@ -69,7 +64,7 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 <button id="receiverBtn">📥 受信</button>
 </div>
 
-<!-- 送信側 -->
+<!-- 送信側：受信側が表示したQRを読み取って接続 -->
 <div id="senderScreen" class="hidden">
   <div class="card" id="connectCard">
     <h3>📥 受信側に接続</h3>
@@ -125,7 +120,7 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
   </div>
 </div>
 
-<!-- 受信側 -->
+<!-- 受信側：英数字6文字のコードとQRを表示 -->
 <div id="receiverScreen" class="hidden">
   <div class="card">
     <h3>📥 受信モード</h3>
@@ -321,7 +316,7 @@ async function startCamera(videoElement, scannerType) {
   }
 }
 
-/* 読み取り枠内だけをQR読み取り対象にする */
+/* 読み取り枠の中だけをQR読み取り対象にする */
 function beginScan(videoElement, onFound) {
   const scan = () => {
     if (!cameraStream) return;
@@ -552,7 +547,7 @@ $("startConnectScanBtn").onclick = async () => {
   beginScan(connectVideo, async raw => {
     const code = normalizeCode(raw);
 
-    if (!new RegExp("^[A-Z0-9]{" + CODE_LENGTH + "}$").test(code)) {
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
       $("connectScanMessage").textContent =
         "このQRコードは接続コードではありません。";
       return;
@@ -596,7 +591,7 @@ $("connectBtn").onclick = () => {
 async function connectSender(rawCode, automatic) {
   const code = normalizeCode(rawCode);
 
-  if (!new RegExp("^[A-Z0-9]{" + CODE_LENGTH + "}$").test(code)) {
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
     $("connectMessage").textContent =
       "6文字の英数字（アルファベットは大文字）を入力してください。";
     return;
