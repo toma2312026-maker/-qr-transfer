@@ -23,9 +23,30 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 .status{font-weight:700;padding:9px;border-radius:9px;background:#eef2f7;margin:10px 0}
 .status.ok{color:#087443;background:#e8f7ef}
 .status.error{color:#b42318;background:#fff0ee}
-#cameraBox{position:relative;width:100%;max-width:400px;margin:12px auto}
-#cameraBox video{width:100%;display:block;border:3px solid #222;border-radius:10px;background:#111}
-#overlay{position:absolute;border:3px solid #ef4444;width:55%;aspect-ratio:1;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+
+/* カメラ映像を読み取り枠の中だけに表示 */
+#cameraBox,.scanViewport{
+  position:relative;
+  width:min(78vw,300px);
+  aspect-ratio:1;
+  margin:12px auto;
+  overflow:hidden;
+  border:3px solid #ef4444;
+  border-radius:14px;
+  background:#111;
+}
+#cameraBox video,.scanViewport video{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+#overlay{
+  position:absolute;
+  inset:0;
+  border:0;
+  pointer-events:none;
+}
 .cameraActions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
 .secondary{background:#e8edf5;color:#243247}
 .tinyButton{font-size:13px;padding:7px 11px;background:#e8edf5;color:#243247}
@@ -33,6 +54,7 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 </style>
 </head>
 <body>
+
 <span id="settingsIcon" aria-label="設定">⚙️</span>
 <h2>QRコード送受信システム</h2>
 
@@ -47,27 +69,35 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 <button id="receiverBtn">📥 受信</button>
 </div>
 
+<!-- 送信側 -->
 <div id="senderScreen" class="hidden">
   <div class="card" id="connectCard">
     <h3>📥 受信側に接続</h3>
     <p>受信側の画面に表示されたQRコードを読み取ってください。</p>
+
     <button id="startConnectScanBtn">📷 QRコードを読み取る</button>
+
     <div id="connectCameraBox" class="hidden">
-      <div id="connectCameraFrame" class="cameraBox" style="position:relative;width:100%;max-width:400px;margin:12px auto">
-        <video id="connectVideo" playsinline style="width:100%;border:3px solid #222;border-radius:10px;background:#111"></video>
-        <div style="position:absolute;border:3px solid #ef4444;width:60%;aspect-ratio:1;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none"></div>
+      <div id="connectCameraFrame" class="scanViewport">
+        <video id="connectVideo" playsinline></video>
       </div>
+
       <div class="cameraActions">
         <button id="connectTorchBtn" class="secondary">🔦 ライト ON</button>
         <button id="stopConnectScanBtn" class="secondary">読み取りを閉じる</button>
       </div>
+
       <p id="connectScanMessage" class="small">QRコードを枠内に合わせてください。</p>
     </div>
+
     <p><button id="manualToggleBtn" class="tinyButton">コードを手入力する</button></p>
+
     <div id="manualInputBox" class="hidden">
       <input id="connectCode" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：A7K2P9">
-      <br><button id="connectBtn">接続</button>
+      <br>
+      <button id="connectBtn">接続</button>
     </div>
+
     <div id="connectMessage" class="small" aria-live="polite"></div>
   </div>
 
@@ -77,19 +107,25 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
     <div id="senderStatus" class="status">接続を確認中…</div>
     <button id="reconnectBtn" class="hidden">↻ 再接続</button>
     <hr>
+
     <p>送信するQRコードを読み取ってください。</p>
     <button id="startScanBtn">▶ QR読み取り開始</button>
+
     <div class="cameraActions">
       <button id="payloadTorchBtn" class="secondary hidden">🔦 ライト ON</button>
       <button id="stopPayloadScanBtn" class="secondary hidden">読み取りを停止</button>
     </div>
+
     <p id="senderResult"></p>
+
     <div id="cameraBox" class="hidden">
-      <video id="video" playsinline></video><div id="overlay"></div>
+      <video id="video" playsinline></video>
+      <div id="overlay"></div>
     </div>
   </div>
 </div>
 
+<!-- 受信側 -->
 <div id="receiverScreen" class="hidden">
   <div class="card">
     <h3>📥 受信モード</h3>
@@ -122,8 +158,16 @@ input{padding:11px;border:1px solid #bbb;border-radius:9px;width:min(100%,290px)
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+import {
+  getDatabase,
+  ref,
+  set,
+  get,
+  onValue,
+  onDisconnect
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
 
+/* ===== Firebase設定 ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyABSz7WUs2QomfCiuiPBF4F2i64ZtFVsnE",
   authDomain: "qrtransfer-b5da2.firebaseapp.com",
@@ -133,15 +177,17 @@ const firebaseConfig = {
   messagingSenderId: "382295952066",
   appId: "1:382295952066:web:bfc8b93afe49773a36c95b"
 };
+/* ======================== */
 
 const CODE_LENGTH = 6;
 const CODE_LIFETIME_MS = 10 * 60 * 1000;
-const CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789";
-const configured = !Object.values(firebaseConfig).some(v => String(v).includes("ここに"));
+const CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+const configured = !Object.values(firebaseConfig).some(v => String(v).includes("ここに"));
 document.getElementById("firebaseWarning").classList.toggle("hidden", configured);
 
 let db = null;
+
 if (configured) {
   const app = initializeApp(firebaseConfig);
   db = getDatabase(app);
@@ -155,13 +201,16 @@ let receiverExpiryTimer = null;
 let cameraStream = null;
 let scanFrame = null;
 let lastScanned = "";
+let activeScanner = "";
 let torchOn = false;
 
 const $ = id => document.getElementById(id);
+
 const video = $("video");
 const connectVideo = $("connectVideo");
 const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
+
 const correctSound = $("correctSound");
 const wrongSound = $("wrongSound");
 
@@ -171,14 +220,19 @@ function path(code) {
 
 function makeCode() {
   let result = "";
+
   for (let i = 0; i < CODE_LENGTH; i++) {
     result += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   }
+
   return result;
 }
 
 function normalizeCode(value) {
-  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH);
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, CODE_LENGTH);
 }
 
 function stopCamera() {
@@ -197,6 +251,7 @@ function stopCamera() {
 
   $("connectCameraBox").classList.add("hidden");
   $("cameraBox").classList.add("hidden");
+
   $("connectTorchBtn").textContent = "🔦 ライト ON";
   $("payloadTorchBtn").textContent = "🔦 ライト ON";
   $("payloadTorchBtn").classList.add("hidden");
@@ -222,32 +277,43 @@ async function toggleTorch(button) {
 
   try {
     torchOn = !torchOn;
-    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+
+    await track.applyConstraints({
+      advanced: [{ torch: torchOn }]
+    });
+
     button.textContent = torchOn ? "🔦 ライト OFF" : "🔦 ライト ON";
+
   } catch (error) {
     torchOn = false;
     alert("ライトを切り替えられませんでした。");
   }
 }
 
-async function startCamera(videoElement) {
+async function startCamera(videoElement, scannerType) {
   stopCamera();
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert("カメラを使うにはHTTPSで開いてください。");
+    alert("カメラを使うにはHTTPSで開いてください。iPhoneではSafariで公開URLを開いてください。");
     return false;
   }
 
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: "environment" } }
+      video: {
+        facingMode: { ideal: "environment" }
+      }
     });
 
+    activeScanner = scannerType;
     videoElement.srcObject = cameraStream;
     videoElement.setAttribute("playsinline", "true");
+
     await videoElement.play();
+
     return true;
+
   } catch (error) {
     stopCamera();
     alert("カメラを使用できません: " + error.message);
@@ -255,115 +321,80 @@ async function startCamera(videoElement) {
   }
 }
 
+/* 読み取り枠内だけをQR読み取り対象にする */
 function beginScan(videoElement, onFound) {
   const scan = () => {
     if (!cameraStream) return;
 
-    if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA && window.jsQR) {
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
+    if (
+      videoElement.readyState === videoElement.HAVE_ENOUGH_DATA &&
+      window.jsQR
+    ) {
+      const side = Math.min(
+        videoElement.videoWidth,
+        videoElement.videoHeight
+      );
+
+      const sx = Math.floor(
+        (videoElement.videoWidth - side) / 2
+      );
+
+      const sy = Math.floor(
+        (videoElement.videoHeight - side) / 2
+      );
+
+      canvas.width = side;
+      canvas.height = side;
 
       if (canvas.width && canvas.height) {
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const result = window.jsQR(imageData.data, imageData.width, imageData.height);
+        ctx.drawImage(
+          videoElement,
+          sx,
+          sy,
+          side,
+          side,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
 
-        if (result && result.data) onFound(result.data);
+        const imageData = ctx.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        const result = window.jsQR(
+          imageData.data,
+          imageData.width,
+          imageData.height
+        );
+
+        if (result && result.data) {
+          onFound(result.data);
+        }
       }
     }
 
-    if (cameraStream) scanFrame = requestAnimationFrame(scan);
+    if (cameraStream) {
+      scanFrame = requestAnimationFrame(scan);
+    }
   };
 
   scanFrame = requestAnimationFrame(scan);
 }
 
-async function connectSender(code, automatic = false) {
-  code = normalizeCode(code);
-
-  if (code.length !== CODE_LENGTH) {
-    $("connectMessage").textContent = "6文字の接続コードを入力してください。";
-    return;
-  }
-
-  if (!db) {
-    $("connectMessage").textContent = "Firebaseの設定を確認してください。";
-    return;
-  }
-
-  $("connectMessage").textContent = "接続中…";
-
-  try {
-    const snapshot = await get(ref(db, path(code)));
-    const data = snapshot.val();
-
-    if (!data || !data.expiresAt || data.expiresAt < Date.now()) {
-      throw new Error("接続コードが見つからないか、有効期限が切れています。");
-    }
-
-    receiverCode = code;
-    localStorage.setItem("qrReceiverCode", code);
-
-    $("connectCard").classList.add("hidden");
-    $("senderReady").classList.remove("hidden");
-    $("senderDestination").textContent = "接続先コード：" + code;
-    $("connectMessage").textContent = "";
-
-    setStatus("🟢 接続成功", "ok");
-    $("reconnectBtn").classList.add("hidden");
-
-    if (receiverUnsub) receiverUnsub();
-
-    receiverUnsub = onValue(ref(db, path(code)), snap => {
-      const current = snap.val();
-
-      if (!current || current.expiresAt < Date.now()) {
-        setStatus("🔴 接続が切断されました", "error");
-        $("reconnectBtn").classList.remove("hidden");
-        return;
-      }
-
-      setStatus("🟢 接続中", "ok");
-
-      if (current.lastMessage && current.lastMessage.time > (window.lastReceivedTime || 0)) {
-        window.lastReceivedTime = current.lastMessage.time;
-        receiveMessage(current.lastMessage.value);
-      }
-    });
-  } catch (error) {
-    if (automatic && receiverCode === code && !$("senderReady").classList.contains("hidden")) {
-      setStatus("🔴 再接続できませんでした。もう一度お試しください。", "error");
-      $("reconnectBtn").classList.remove("hidden");
-    } else {
-      $("connectMessage").textContent = error.message;
-      $("connectCard").classList.remove("hidden");
-      $("senderReady").classList.add("hidden");
-      if (!automatic) $("connectCode").value = code;
-    }
-  }
-}
-
-function receiveMessage(value) {
-  const normalized = String(value || "").trim();
-  const isCorrect = correctCodes.includes(normalized);
-
-  $("senderResult").textContent = isCorrect
-    ? "⭕ 正解：" + normalized
-    : "❌ 受信：" + normalized;
-
-  const sound = isCorrect ? correctSound : wrongSound;
-  if (sound.src) {
-    sound.currentTime = 0;
-    sound.play().catch(() => {});
-  }
-}
-
+/* モード選択 */
 $("senderBtn").onclick = () => {
   mode = "sender";
+
   $("modeSelect").classList.add("hidden");
   $("senderScreen").classList.remove("hidden");
 
   const saved = localStorage.getItem("qrReceiverCode");
+
   if (saved && db) {
     $("manualInputBox").classList.remove("hidden");
     $("connectCode").value = normalizeCode(saved);
@@ -371,151 +402,348 @@ $("senderBtn").onclick = () => {
   }
 };
 
+/* 受信モード */
 $("receiverBtn").onclick = async () => {
   mode = "receiver";
+
   $("modeSelect").classList.add("hidden");
   $("receiverScreen").classList.remove("hidden");
 
   if (!db) {
-    $("statusReceiver").textContent = "Firebaseの設定を確認してください。";
+    $("statusReceiver").textContent = "Firebase設定が必要です";
+    $("statusReceiver").className = "status error";
     return;
   }
 
-  const code = makeCode();
-  receiverCode = code;
-  const expiresAt = Date.now() + CODE_LIFETIME_MS;
-
-  $("receiverCode").textContent = code;
-  $("receiverQr").innerHTML = "";
-
-  new QRCode($("receiverQr"), {
-    text: code,
-    width: 180,
-    height: 180,
-    correctLevel: QRCode.CorrectLevel.M
-  });
-
   try {
-    await set(ref(db, path(code)), {
-      createdAt: Date.now(),
-      expiresAt,
+    let code = makeCode();
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const existing = await get(ref(db, path(code)));
+
+      if (!existing.exists()) break;
+
+      code = makeCode();
+    }
+
+    receiverCode = code;
+
+    const createdAt = Date.now();
+
+    $("receiverCode").textContent = receiverCode;
+    $("receiverQr").innerHTML = "";
+
+    if (window.QRCode) {
+      new QRCode($("receiverQr"), {
+        text: receiverCode,
+        width: 190,
+        height: 190,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } else {
+      $("receiverQr").textContent = "QRコードを表示できません。下のコードを使用してください。";
+    }
+
+    const receiverRef = ref(db, path(receiverCode));
+    const onlineRef = ref(db, path(receiverCode) + "/online");
+
+    await set(receiverRef, {
+      online: true,
+      createdAt,
       lastMessage: null
     });
 
-    await onDisconnect(ref(db, path(code))).remove();
+    onDisconnect(onlineRef).set(false);
 
-    $("statusReceiver").textContent = "🟢 送信側からの接続を待っています";
-    $("statusReceiver").className = "status ok";
-    startExpiryTimer(expiresAt);
+    if (receiverExpiryTimer) {
+      clearInterval(receiverExpiryTimer);
+    }
 
-    onValue(ref(db, path(code)), snapshot => {
-      const data = snapshot.val();
-      if (!data) {
-        $("statusReceiver").textContent = "🔴 接続が切断されました";
+    const updateExpiry = async () => {
+      const remaining = Math.max(
+        0,
+        CODE_LIFETIME_MS - (Date.now() - createdAt)
+      );
+
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+
+      $("receiverExpiry").textContent =
+        `有効期限：${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
+
+      if (remaining <= 0) {
+        clearInterval(receiverExpiryTimer);
+
+        $("statusReceiver").textContent = "コードの有効期限が切れました。";
         $("statusReceiver").className = "status error";
+        $("receiverExpiry").textContent = "有効期限切れ";
+
+        await set(onlineRef, false);
       }
-    });
+    };
+
+    updateExpiry();
+    receiverExpiryTimer = setInterval(updateExpiry, 1000);
+
+    onValue(
+      ref(db, path(receiverCode) + "/lastMessage"),
+      snap => {
+        const data = snap.val();
+
+        if (!data || !data.value) return;
+
+        $("receiverResult").textContent = "受信: " + data.value;
+
+        if (correctCodes.includes(data.value)) {
+          $("statusReceiver").textContent = "⭕ 正解！";
+          $("statusReceiver").className = "status ok";
+
+          correctSound.currentTime = 0;
+          correctSound.play().catch(() => {});
+
+        } else {
+          $("statusReceiver").textContent = "❌ 不正解";
+          $("statusReceiver").className = "status error";
+
+          wrongSound.currentTime = 0;
+          wrongSound.play().catch(() => {});
+        }
+      }
+    );
+
   } catch (error) {
-    $("statusReceiver").textContent = "エラー：" + error.message;
+    $("statusReceiver").textContent = "接続準備エラー: " + error.message;
     $("statusReceiver").className = "status error";
   }
 };
 
-function startExpiryTimer(expiresAt) {
-  if (receiverExpiryTimer) clearInterval(receiverExpiryTimer);
-
-  const update = () => {
-    const remaining = Math.max(0, expiresAt - Date.now());
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-
-    $("receiverExpiry").textContent =
-      "有効期限：" + String(minutes).padStart(2, "0") + ":" +
-      String(seconds).padStart(2, "0");
-
-    if (remaining <= 0) {
-      clearInterval(receiverExpiryTimer);
-      $("statusReceiver").textContent = "🔴 接続コードの有効期限が切れました";
-      $("statusReceiver").className = "status error";
-    }
-  };
-
-  update();
-  receiverExpiryTimer = setInterval(update, 1000);
-}
-
+/* コードコピー */
 $("copyCodeBtn").onclick = async () => {
   try {
     await navigator.clipboard.writeText(receiverCode);
-    $("receiverResult").textContent = "コードをコピーしました。";
+
+    $("copyCodeBtn").textContent = "コピーしました！";
+
+    setTimeout(() => {
+      $("copyCodeBtn").textContent = "コードをコピー";
+    }, 1600);
+
   } catch {
-    $("receiverResult").textContent = "コピーできませんでした。";
+    alert("コピーできませんでした。コードを手動でコピーしてください。");
   }
+};
+
+/* 接続用QR読み取り */
+$("startConnectScanBtn").onclick = async () => {
+  if (!window.jsQR) {
+    alert("QR読み取りライブラリを読み込めませんでした。");
+    return;
+  }
+
+  const started = await startCamera(connectVideo, "connect");
+
+  if (!started) return;
+
+  $("connectCameraBox").classList.remove("hidden");
+
+  $("connectScanMessage").textContent =
+    "QRコードを枠内に合わせてください。";
+
+  beginScan(connectVideo, async raw => {
+    const code = normalizeCode(raw);
+
+    if (!new RegExp("^[A-Z0-9]{" + CODE_LENGTH + "}$").test(code)) {
+      $("connectScanMessage").textContent =
+        "このQRコードは接続コードではありません。";
+      return;
+    }
+
+    stopCamera();
+
+    $("connectCode").value = code;
+    $("manualInputBox").classList.remove("hidden");
+
+    $("connectMessage").textContent =
+      "コードを読み取りました。接続しています…";
+
+    await connectSender(code, false);
+  });
+};
+
+$("stopConnectScanBtn").onclick = stopCamera;
+
+$("connectTorchBtn").onclick = () => {
+  toggleTorch($("connectTorchBtn"));
 };
 
 $("manualToggleBtn").onclick = () => {
   $("manualInputBox").classList.toggle("hidden");
-};
 
-$("connectCode").addEventListener("input", event => {
-  event.target.value = normalizeCode(event.target.value);
-});
-
-$("connectBtn").onclick = () => connectSender($("connectCode").value);
-$("reconnectBtn").onclick = () => connectSender(receiverCode, true);
-
-$("startConnectScanBtn").onclick = async () => {
-  $("connectCameraBox").classList.remove("hidden");
-
-  if (await startCamera(connectVideo)) {
-    beginScan(connectVideo, raw => {
-      const code = normalizeCode(raw);
-
-      if (code.length === CODE_LENGTH) {
-        stopCamera();
-        $("connectCode").value = code;
-        connectSender(code);
-      }
-    });
+  if (!$("manualInputBox").classList.contains("hidden")) {
+    $("connectCode").focus();
   }
 };
 
-$("stopConnectScanBtn").onclick = stopCamera;
-$("connectTorchBtn").onclick = () => toggleTorch($("connectTorchBtn"));
+$("connectCode").addEventListener("input", () => {
+  $("connectCode").value = normalizeCode($("connectCode").value);
+});
 
+$("connectBtn").onclick = () => {
+  connectSender($("connectCode").value, false);
+};
+
+/* 接続処理 */
+async function connectSender(rawCode, automatic) {
+  const code = normalizeCode(rawCode);
+
+  if (!new RegExp("^[A-Z0-9]{" + CODE_LENGTH + "}$").test(code)) {
+    $("connectMessage").textContent =
+      "6文字の英数字（アルファベットは大文字）を入力してください。";
+    return;
+  }
+
+  if (!db) {
+    $("connectMessage").textContent = "先にFirebase設定が必要です。";
+    return;
+  }
+
+  $("connectMessage").textContent = "接続を確認中…";
+
+  try {
+    const snap = await get(ref(db, path(code)));
+
+    if (!snap.exists()) {
+      throw new Error("受信側が見つかりません。");
+    }
+
+    const data = snap.val();
+
+    if (!data.createdAt || Date.now() - data.createdAt >= CODE_LIFETIME_MS) {
+      throw new Error("接続コードの有効期限が切れています。受信側で新しいコードを発行してください。");
+    }
+
+    if (data.online !== true) {
+      throw new Error("受信側がオフラインです。受信側の画面を確認してください。");
+    }
+
+    receiverCode = code;
+
+    localStorage.setItem("qrReceiverCode", code);
+
+    $("connectCard").classList.add("hidden");
+    $("senderReady").classList.remove("hidden");
+
+    $("senderDestination").textContent = "接続先：" + code;
+    $("reconnectBtn").classList.add("hidden");
+    $("connectMessage").textContent = "";
+
+    setStatus("🟢 接続成功！", "ok");
+
+    if (receiverUnsub) receiverUnsub();
+
+    receiverUnsub = onValue(
+      ref(db, path(code) + "/online"),
+      onlineSnap => {
+        if (onlineSnap.val() !== true) {
+          stopCamera();
+
+          setStatus("🔴 通信が切れました。再接続できます。", "error");
+          $("reconnectBtn").classList.remove("hidden");
+
+        } else {
+          setStatus("🟢 接続中", "ok");
+          $("reconnectBtn").classList.add("hidden");
+        }
+      }
+    );
+
+  } catch (error) {
+    if (
+      automatic &&
+      receiverCode === code &&
+      !$("senderReady").classList.contains("hidden")
+    ) {
+      setStatus("🔴 再接続できませんでした。もう一度お試しください。", "error");
+      $("reconnectBtn").classList.remove("hidden");
+
+    } else {
+      $("connectMessage").textContent = error.message;
+      $("connectCard").classList.remove("hidden");
+      $("senderReady").classList.add("hidden");
+
+      if (!automatic) {
+        $("connectCode").value = code;
+      }
+    }
+  }
+}
+
+/* 再接続 */
+$("reconnectBtn").onclick = async () => {
+  $("reconnectBtn").disabled = true;
+
+  setStatus("再接続を確認中…");
+
+  await connectSender(receiverCode, true);
+
+  $("reconnectBtn").disabled = false;
+
+  if (
+    !$("senderReady").classList.contains("hidden") &&
+    $("senderStatus").textContent.includes("通信が切れました")
+  ) {
+    $("reconnectBtn").classList.remove("hidden");
+  }
+};
+
+/* 送信するQRコードの読み取り */
 $("startScanBtn").onclick = async () => {
+  const started = await startCamera(video, "payload");
+
+  if (!started) return;
+
   $("cameraBox").classList.remove("hidden");
   $("payloadTorchBtn").classList.remove("hidden");
   $("stopPayloadScanBtn").classList.remove("hidden");
 
-  if (await startCamera(video)) {
-    beginScan(video, async raw => {
-      if (raw === lastScanned) return;
-      lastScanned = raw;
+  $("senderResult").textContent = "QRコードを読み取り中…";
 
-      $("senderResult").textContent = "送信: " + raw;
+  beginScan(video, async raw => {
+    if (raw === lastScanned) return;
 
-      try {
-        await set(ref(db, path(receiverCode) + "/lastMessage"), {
+    lastScanned = raw;
+
+    $("senderResult").textContent = "送信: " + raw;
+
+    try {
+      await set(
+        ref(db, path(receiverCode) + "/lastMessage"),
+        {
           value: raw,
           time: Date.now()
-        });
-      } catch (error) {
-        setStatus("送信に失敗しました: " + error.message, "error");
-      }
+        }
+      );
 
-      setTimeout(() => {
-        lastScanned = "";
-      }, 1200);
-    });
-  }
+    } catch (error) {
+      setStatus("送信に失敗しました: " + error.message, "error");
+    }
+
+    setTimeout(() => {
+      lastScanned = "";
+    }, 1200);
+  });
 };
 
-$("payloadTorchBtn").onclick = () => toggleTorch($("payloadTorchBtn"));
+$("payloadTorchBtn").onclick = () => {
+  toggleTorch($("payloadTorchBtn"));
+};
+
 $("stopPayloadScanBtn").onclick = stopCamera;
 
+/* 設定 */
 function addCodeInput(value = "") {
   const row = document.createElement("div");
+
   const input = document.createElement("input");
 
   input.type = "text";
@@ -523,11 +751,13 @@ function addCodeInput(value = "") {
   input.value = value;
 
   const remove = document.createElement("button");
+
   remove.textContent = "削除";
   remove.className = "tinyButton";
   remove.onclick = () => row.remove();
 
   row.append(input, remove);
+
   $("codeList").appendChild(row);
 }
 
@@ -540,7 +770,10 @@ function saveSettings() {
     .map(x => x.value.trim())
     .filter(Boolean);
 
-  localStorage.setItem("qrCorrectCodes", JSON.stringify(correctCodes));
+  localStorage.setItem(
+    "qrCorrectCodes",
+    JSON.stringify(correctCodes)
+  );
 
   const c = $("correctSoundFile").files[0];
   const w = $("wrongSoundFile").files[0];
@@ -549,6 +782,7 @@ function saveSettings() {
   if (w) wrongSound.src = URL.createObjectURL(w);
 
   alert("保存しました");
+
   closeSettings();
 }
 
@@ -558,22 +792,31 @@ $("closeSettingsBtn").onclick = closeSettings;
 
 $("settingsIcon").onclick = () => {
   $("settingsModal").style.display = "block";
-  if (!$("codeList").children.length) addCodeInput();
+
+  if (!$("codeList").children.length) {
+    addCodeInput();
+  }
 };
 
 try {
-  correctCodes = JSON.parse(localStorage.getItem("qrCorrectCodes") || "[]");
+  correctCodes = JSON.parse(
+    localStorage.getItem("qrCorrectCodes") || "[]"
+  );
 } catch {}
 
 correctCodes.forEach(addCodeInput);
 
 window.addEventListener("pagehide", () => {
   stopCamera();
-  if (receiverExpiryTimer) clearInterval(receiverExpiryTimer);
+
+  if (receiverExpiryTimer) {
+    clearInterval(receiverExpiryTimer);
+  }
 });
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+
 </body>
 </html>
